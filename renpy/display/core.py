@@ -599,7 +599,8 @@ class Renderer(object):
 # How long should we be in maximum framerate mode at the start of the game?
 initial_maximum_framerate = 0.0
 
-
+need_post_process = True
+cached_blur_positions = []
 class Interface(object):
     """
     This represents the user interface that interacts with the user.
@@ -1371,7 +1372,7 @@ class Interface(object):
             pygame.event.get()
 
     def draw_screen(self, root_widget, fullscreen_video, draw):
-
+        global need_post_process, cached_blur_positions
         try:
             renpy.display.render.per_frame = True
             renpy.display.screen.per_frame()
@@ -1383,6 +1384,49 @@ class Interface(object):
             renpy.config.screen_width,
             renpy.config.screen_height,
             )
+
+        ## POST PROCESS ##
+        # 在这里遍历一下 surftree 的 child 的数据，从而拿到正确的坐标。
+        # 目前效果已经实现的很完美了，虽然在性能上有点损失，后处理之后重新绘制，浪费了一次绘制次数。也许在充分学习着色器的知识之后，我们可以减少到只要一次绘制，把着色器直接应用于 screen 后面的 layer。十分地浪费性能，每次扫描，估计浪费了大量的性能。而且存在延迟。通过缓存节省了一定的性能开销。不过也许有更加优雅的方法？怎么在 walk tree 的时候做到这一点。或者说，怎么在 displayable 排列完成的时候去做一下 transform.
+        blur_list = []
+        blur_positions = []
+        def visit_node(current_node, xoffset, yoffset):
+            global need_post_process
+            if hasattr(current_node, 'render_of'):
+                try:
+                    current_render_of = next(iter(current_node.render_of))
+                    if isinstance(current_render_of, renpy.display.behavior.Button):
+                        # print("current display: ", current_render_of, current_render_of.style.parent, current_render_of.child, ", current offset: ", xoffset, yoffset)
+                        if current_render_of.style.parent[0] == "choice_button":
+                            # 根据 offset 来画图
+                            # print("windowsize:", current_render_of.window_size)
+                            current_width, current_height = current_render_of.window_size
+                            rel_x = xoffset / renpy.config.screen_width
+                            rel_p = (xoffset + current_width) / renpy.config.screen_width
+                            rel_y = yoffset / renpy.config.screen_height
+                            rel_q = (yoffset + current_height) / renpy.config.screen_height
+                            def blur_relative(d):
+                                return renpy.display.transform.Transform(d, shader="guoyun.blur_relative", mesh=True, u_blur_log2=6.0, u_guoyun_blur_range=(rel_x, rel_p, rel_y, rel_q))
+                            blur_list.append(blur_relative)
+                            blur_positions.append((rel_x, rel_p, rel_y, rel_q))
+
+                    for child, xo, yo, focus, main in current_node.children:
+                        visit_node(child, xoffset+xo, yoffset+yo)
+                except StopIteration:
+                    pass
+
+        if need_post_process: # before post process
+            print('check post process')
+            visit_node(surftree, 0, 0)
+            if blur_positions != cached_blur_positions:
+                renpy.exports.show_layer_at(at_list=blur_list, layer='master', reset=True, camera=True)
+                need_post_process = False
+                cached_blur_positions = blur_positions.copy()
+                print("need postprocess, redraw screen")
+                renpy.exports.restart_interaction()
+        else:
+            need_post_process = True
+        # POST PROCESS END##
 
         if draw:
             renpy.display.draw.draw_screen(surftree)

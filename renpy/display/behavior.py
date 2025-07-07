@@ -1051,6 +1051,14 @@ class Button(renpy.display.layout.Window):
             return self.sensitive
         return is_sensitive(self.action)
 
+   
+    # 关于 Displayable.render 和 Displayable.place 的调用：这两个是渲染的核心部分。
+    # render 负责创建一个 Render 对象并返回，只对应于当前 Displayable 的内容。它会先调用子Displayable 的 render 方法，创建孩子的 Displayable，然后调用孩子的 place 方法，把孩子放进自己的 Render 对象里面然后返回。
+    # place 方法则负责调用 Render.blit 函数，将孩子依据偏移量放进 dest Render 里面，但是这个 surf 必须是自己的 Render 对象，否则没有意义。（一个有副作用的函数，参数写法非常的 C 风格）
+    # 这 Displayable 和 Render 对象是完全解耦的，不存在谁包含谁的关系，因此你会看到，像 place 这种方法需要把自己的 Render 和 parent Render 作为参数传进来。
+    # 难蚌的地方在于，Displayable 负责计算偏移量，但是却不能获取 parent 的引用，导致我没法从 child 回溯到它的根节点。
+    # 而 Render 对象则既有 parents 也有 children。虽然 parents 是一个集合，但是大概率就是只有一个 parent，或者就是没有 parent. 并且，children 里面还会详细记录每一层节点的偏移量（在调用 blit 的时候产生）。如果我们想获取一个 Displayable 最终显示在屏幕上的坐标，最好就是直接拿 Render 的。
+
     def per_interact(self):
 
         if not self.locked:
