@@ -1416,13 +1416,14 @@ class Interface(object):
                     pass
 
         if need_post_process: # before post process
-            print('check post process')
+            # print('check post process')
             visit_node(surftree, 0, 0)
             if blur_positions != cached_blur_positions:
+                # renpy.exports.with_statement(None)
                 renpy.exports.show_layer_at(at_list=blur_list, layer='master', reset=True, camera=True)
                 need_post_process = False
                 cached_blur_positions = blur_positions.copy()
-                print("need postprocess, redraw screen")
+                # print("need postprocess, redraw screen")
                 renpy.exports.restart_interaction()
         else:
             need_post_process = True
