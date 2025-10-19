@@ -21,6 +21,48 @@
 
 init python:
 
+    # 相对坐标更好用一点。
+    renpy.register_shader("guoyun.blur_relative", variables="""
+        uniform sampler2D tex0;
+        uniform vec4 u_guoyun_blur_range; // 相对坐标 [0.0, 1.0]
+        uniform float u_blur_log2;
+        attribute vec2 a_tex_coord;
+        varying vec2 v_tex_coord;
+        varying float v_enable_blur;    
+    """, vertex_300="""
+    """, fragment_300="""
+        gl_FragColor = vec4(0.);
+        float renpy_blur_norm = 0.;
+
+        for (float i = -5.; i < 1.; i += 1.) {
+            float renpy_blur_weight = exp(-0.5 * pow(u_blur_log2 - i, 2.));
+            renpy_blur_norm += renpy_blur_weight;
+        }
+
+        gl_FragColor += renpy_blur_norm * texture2D(tex0, v_tex_coord.xy, 0.);
+
+        for (float i = 1.; i < 14.; i += 1.) {
+            if (i >= u_blur_log2 + 5.) {
+                break;
+            }
+
+            float renpy_blur_weight = exp(-0.5 * pow(u_blur_log2 - i, 2.));
+            gl_FragColor += renpy_blur_weight * texture2D(tex0, v_tex_coord.xy, i);
+            renpy_blur_norm += renpy_blur_weight;
+        }
+
+        // 直接使用纹理坐标
+        if (renpy_blur_norm > 0.0 && 
+            (v_tex_coord.x > u_guoyun_blur_range.x && 
+            v_tex_coord.x < u_guoyun_blur_range.y && 
+            v_tex_coord.y > u_guoyun_blur_range.z && 
+            v_tex_coord.y < u_guoyun_blur_range.w)) {
+            gl_FragColor /= renpy_blur_norm;
+        } else {
+            gl_FragColor = texture2D(tex0, v_tex_coord.xy, 0.0);
+        }
+    """)
+
     renpy.register_shader("renpy.geometry", variables="""
         uniform mat4 u_transform;
         attribute vec4 a_position;
